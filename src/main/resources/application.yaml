@@ -18,13 +18,22 @@ spring:
     consumer:
       group-id: flightbookingsystem
       auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      # ErrorHandlingDeserializer wraps the real deserializers so a poison/undeserializable record
+      # surfaces as a handled exception (→ retry/DLT) instead of blocking the partition forever.
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: "club.cred.flightbookingsystem.messaging"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    # Propagate trace context across the broker so a booking flow is one trace end-to-end.
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
 
 # --- Domain / search tuning -------------------------------------------------
 flightbooking:
@@ -68,6 +77,11 @@ management:
     metrics:
       export:
         enabled: true
+  # Distributed tracing: generate a trace per request and propagate it across HTTP and Kafka.
+  # (Sample everything in dev; lower in prod. Trace/span ids appear in logs regardless of sampling.)
+  tracing:
+    sampling:
+      probability: 1.0
 
 # --- Logging ----------------------------------------------------------------
 logging:
@@ -80,7 +94,7 @@ logging:
     org.apache.kafka: WARN
     org.springframework.kafka: INFO
   pattern:
-    # Include thread + logger so booking/Kafka/scheduler activity is traceable in prod logs.
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+    # Include trace/span ids + thread + logger so a request is traceable across HTTP, Kafka, and scheduler activity.
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [${spring.application.name:},%X{traceId:-},%X{spanId:-}] [%thread] %logger{36} - %msg%n"
 
 

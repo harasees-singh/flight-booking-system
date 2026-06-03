@@ -207,6 +207,8 @@ The payment system publishes a confirm/deny message to the **`payment.callback`*
 
 Exposed via `spring-boot-starter-actuator` + `micrometer-registry-prometheus` at `/actuator/{health,info,prometheus,metrics}`. A **Prometheus + Grafana stack** ships in `docker-compose.yml` (Prometheus scrapes the app; Grafana auto-provisions the datasource and the `flightbookingsystem-overview` dashboard under `monitoring/`).
 
+**Tracing** — Micrometer Tracing (Brave bridge) emits a trace per request, propagated across HTTP and Kafka, with `traceId`/`spanId` in every log line for correlation.
+
 ---
 
 ## 5. Package Layout
@@ -273,7 +275,10 @@ Key tunables (`application.yaml`, prefix `flightbooking.`):
 ## 9. Resilience & Operability
 - **Durable expiry** — the sweeper re-derives stale bookings from the DB each run (no in-memory timers), so it survives restarts. Each booking is expired in its own try/catch and a DB query failure is swallowed-and-logged so one bad row or transient outage doesn't stop the sweep.
 - **Graph refresh fault tolerance** — a failed rebuild logs an error and **retains the previous immutable snapshot** rather than going dark.
-- **Kafka publish safety** — sends use async callbacks; a failed publish is logged at `ERROR` (a dropped `payment.refund` is flagged as money-owed-not-processed). The `payment.callback` consumer guards malformed messages and rethrows on processing failure so the listener container can retry/route to a DLT.
-- **Structured logging** — per-package levels and a thread/logger console pattern (`application.yaml`) make booking, Kafka, and scheduler activity traceable in production.
+- **Kafka publish safety** — sends use async callbacks; a failed publish is logged at `ERROR` (a dropped `payment.refund` is flagged as money-owed-not-processed).
+- **Kafka consume safety (retry + DLT)** — consumers use an `ErrorHandlingDeserializer` so a poison/undeserializable record can't block the partition. A `DefaultErrorHandler` retries transient failures with a fixed back-off and then routes the record to a per-topic **dead-letter topic** (`<topic>.DLT`); deserialization/illegal-argument errors are non-retryable and go straight to the DLT.
+- **Sanitized errors** — an `@RestControllerAdvice` (extending `ResponseEntityExceptionHandler`) maps standard 4xx and domain exceptions precisely, and a catch-all returns a **sanitized 500 with a correlation `errorId`** (logged server-side) so stack traces never leak to clients.
+- **Distributed tracing** — Micrometer Tracing (Brave) generates a trace per request and **propagates it across HTTP and Kafka** (`observation-enabled`), so a booking journey is one trace end-to-end; `traceId`/`spanId` are included in every log line.
+- **Structured logging** — per-package levels and a thread/logger/trace console pattern (`application.yaml`) make booking, Kafka, and scheduler activity traceable in production.
 
 

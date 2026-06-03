@@ -59,5 +59,18 @@ class ApiExceptionHandlerTest {
 
         assertThat(response.getBody()).containsEntry("message", "");
     }
+
+    @Test
+    void unexpectedExceptionMapsTo500WithSanitizedBodyAndErrorId() {
+        ResponseEntity<Map<String, Object>> response =
+                handler.handleUnexpected(new RuntimeException("DB connection pool exhausted at 0xCAFEBABE"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).containsEntry("status", 500);
+        // Must NOT leak the internal exception message to the client.
+        assertThat(response.getBody().get("message").toString()).doesNotContain("0xCAFEBABE");
+        assertThat(response.getBody()).containsKey("errorId");
+        assertThat(response.getBody().get("errorId").toString()).isNotBlank();
+    }
 }
 
