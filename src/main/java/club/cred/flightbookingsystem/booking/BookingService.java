@@ -8,6 +8,7 @@ import club.cred.flightbookingsystem.dto.BookingResponse;
 import club.cred.flightbookingsystem.dto.CreateBookingRequest;
 import club.cred.flightbookingsystem.dto.PassengerRequest;
 import club.cred.flightbookingsystem.messaging.BookingEventPublisher;
+import club.cred.flightbookingsystem.metrics.BookingMetrics;
 import club.cred.flightbookingsystem.repository.BookingRepository;
 import club.cred.flightbookingsystem.repository.FlightRepository;
 import java.math.BigDecimal;
@@ -48,6 +49,7 @@ public class BookingService {
     private final SeatService seatService;
     private final BookingStateMachine stateMachine;
     private final BookingEventPublisher eventPublisher;
+    private final BookingMetrics bookingMetrics;
 
     private final int maxLegs;
     private final long minLayoverMinutes;
@@ -58,6 +60,7 @@ public class BookingService {
                           SeatService seatService,
                           BookingStateMachine stateMachine,
                           BookingEventPublisher eventPublisher,
+                          BookingMetrics bookingMetrics,
                           @Value("${flightbooking.search.max-legs:3}") int maxLegs,
                           @Value("${flightbooking.search.min-layover-minutes:60}") long minLayoverMinutes,
                           @Value("${flightbooking.search.max-layover-minutes:720}") long maxLayoverMinutes) {
@@ -66,6 +69,7 @@ public class BookingService {
         this.seatService = seatService;
         this.stateMachine = stateMachine;
         this.eventPublisher = eventPublisher;
+        this.bookingMetrics = bookingMetrics;
         this.maxLegs = maxLegs;
         this.minLayoverMinutes = minLayoverMinutes;
         this.maxLayoverMinutes = maxLayoverMinutes;
@@ -89,6 +93,7 @@ public class BookingService {
             } else {
                 // Roll back any seats already blocked on earlier legs, then fail the request.
                 blocked.forEach(id -> seatService.release(id, pax));
+                bookingMetrics.recordSeatRejection();
                 throw new SeatUnavailableException(
                         "Only fewer than " + pax + " seats remain on flight " + leg.getId());
             }
@@ -157,6 +162,7 @@ public class BookingService {
         releaseSeats(booking);
         booking.setState(BookingState.FAILURE);
         eventPublisher.bookingStateChanged(booking);
+        bookingMetrics.recordTransition(BookingState.FAILURE);
         log.info("Booking {} expired -> FAILURE (seats released)", bookingId);
     }
 

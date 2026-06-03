@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  # Flight booking app (Spring Boot Actuator + Micrometer Prometheus endpoint).
+  # The app runs on the host (./mvnw spring-boot:run); from inside the Prometheus
+  # container the host is reachable at host.docker.internal.
+  - job_name: flightbookingsystem
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+

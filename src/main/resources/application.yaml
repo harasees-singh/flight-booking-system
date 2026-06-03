@@ -55,3 +55,16 @@ management:
   metrics:
     tags:
       application: flightbookingsystem
+    distribution:
+      # Publish histogram buckets so Prometheus/Grafana can compute p50/p95/p99 latency,
+      # plus app-side percentiles and a few latency SLO buckets for the HTTP read/write paths.
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+      slo:
+        http.server.requests: 50ms, 100ms, 200ms, 500ms, 1s
+  prometheus:
+    metrics:
+      export:
+        enabled: true

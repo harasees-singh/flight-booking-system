@@ -19,8 +19,10 @@ import club.cred.flightbookingsystem.dto.BookingResponse;
 import club.cred.flightbookingsystem.dto.CreateBookingRequest;
 import club.cred.flightbookingsystem.dto.PassengerRequest;
 import club.cred.flightbookingsystem.messaging.BookingEventPublisher;
+import club.cred.flightbookingsystem.metrics.BookingMetrics;
 import club.cred.flightbookingsystem.repository.BookingRepository;
 import club.cred.flightbookingsystem.repository.FlightRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,7 +42,7 @@ class BookingServiceTest {
 
     private final BookingService service = new BookingService(
             bookingRepository, flightRepository, seatService, new BookingStateMachine(),
-            eventPublisher,
+            eventPublisher, new BookingMetrics(new SimpleMeterRegistry()),
             3, 60, 720);
 
     private static Flight flight(long id, String src, String dst,

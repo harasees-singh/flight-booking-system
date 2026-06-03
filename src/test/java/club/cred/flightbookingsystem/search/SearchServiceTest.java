@@ -14,6 +14,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+
+import club.cred.flightbookingsystem.metrics.SearchMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 /** Unit tests for the BFS journey search. The graph is mocked so each test controls the edges. */
@@ -25,7 +28,8 @@ class SearchServiceTest {
     private static final long MAX_LAYOVER = 720;
 
     private final FlightGraph graph = mock(FlightGraph.class);
-    private final SearchService service = new SearchService(graph, MAX_LEGS, MIN_LAYOVER, MAX_LAYOVER);
+    private final SearchService service = new SearchService(
+            graph, new SearchMetrics(new SimpleMeterRegistry()), MAX_LEGS, MIN_LAYOVER, MAX_LAYOVER);
 
     private static LocalDateTime at(int hour, int minute) {
         return LocalDateTime.of(DATE, LocalTime.of(hour, minute));

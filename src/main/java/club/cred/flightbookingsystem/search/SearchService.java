@@ -13,6 +13,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
 import java.util.Set;
+
+import club.cred.flightbookingsystem.metrics.SearchMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -30,15 +32,18 @@ import org.springframework.stereotype.Service;
 public class SearchService {
 
     private final FlightGraph flightGraph;
+    private final SearchMetrics searchMetrics;
     private final int maxLegs;
     private final long minLayoverMinutes;
     private final long maxLayoverMinutes;
 
     public SearchService(FlightGraph flightGraph,
+                         SearchMetrics searchMetrics,
                          @Value("${flightbooking.search.max-legs:3}") int maxLegs,
                          @Value("${flightbooking.search.min-layover-minutes:60}") long minLayoverMinutes,
                          @Value("${flightbooking.search.max-layover-minutes:720}") long maxLayoverMinutes) {
         this.flightGraph = flightGraph;
+        this.searchMetrics = searchMetrics;
         this.maxLegs = maxLegs;
         this.minLayoverMinutes = minLayoverMinutes;
         this.maxLayoverMinutes = maxLayoverMinutes;
@@ -49,6 +54,7 @@ public class SearchService {
         journeys.sort(Comparator
                 .comparingInt(JourneyDto::stops)
                 .thenComparingInt(JourneyDto::totalDurationMin));
+        searchMetrics.recordSearch(source, destination, journeys.size());
         return new SearchResponse(source, destination, date, passengers, journeys.size(), journeys);
     }
 

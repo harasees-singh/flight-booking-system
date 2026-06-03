@@ -20,8 +20,10 @@ import club.cred.flightbookingsystem.domain.RefundState;
 import club.cred.flightbookingsystem.dto.CancellationResponse;
 import club.cred.flightbookingsystem.messaging.BookingEventPublisher;
 import club.cred.flightbookingsystem.messaging.RefundEventPublisher;
+import club.cred.flightbookingsystem.metrics.BookingMetrics;
 import club.cred.flightbookingsystem.repository.BookingRepository;
 import club.cred.flightbookingsystem.repository.RefundRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,7 +45,8 @@ class CancellationServiceTest {
 
     private final CancellationService service = new CancellationService(
             bookingRepository, refundRepository, seatService, new BookingStateMachine(),
-            refundPolicy, refundEventPublisher, bookingEventPublisher);
+            refundPolicy, refundEventPublisher, bookingEventPublisher,
+            new BookingMetrics(new SimpleMeterRegistry()));
 
     private static Flight flight(long id, String src, String dst) {
         Flight f = new Flight(AIRCRAFT, src, dst, T0, T0.plusHours(2), 120, 180, 100,

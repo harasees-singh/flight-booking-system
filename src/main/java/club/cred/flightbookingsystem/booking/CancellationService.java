@@ -8,6 +8,7 @@ import club.cred.flightbookingsystem.domain.RefundState;
 import club.cred.flightbookingsystem.dto.CancellationResponse;
 import club.cred.flightbookingsystem.messaging.BookingEventPublisher;
 import club.cred.flightbookingsystem.messaging.RefundEventPublisher;
+import club.cred.flightbookingsystem.metrics.BookingMetrics;
 import club.cred.flightbookingsystem.repository.BookingRepository;
 import club.cred.flightbookingsystem.repository.RefundRepository;
 import java.math.BigDecimal;
@@ -37,6 +38,7 @@ public class CancellationService {
     private final RefundPolicy refundPolicy;
     private final RefundEventPublisher refundEventPublisher;
     private final BookingEventPublisher bookingEventPublisher;
+    private final BookingMetrics bookingMetrics;
 
     public CancellationService(BookingRepository bookingRepository,
                                RefundRepository refundRepository,
@@ -44,7 +46,8 @@ public class CancellationService {
                                BookingStateMachine stateMachine,
                                RefundPolicy refundPolicy,
                                RefundEventPublisher refundEventPublisher,
-                               BookingEventPublisher bookingEventPublisher) {
+                               BookingEventPublisher bookingEventPublisher,
+                               BookingMetrics bookingMetrics) {
         this.bookingRepository = bookingRepository;
         this.refundRepository = refundRepository;
         this.seatService = seatService;
@@ -52,6 +55,7 @@ public class CancellationService {
         this.refundPolicy = refundPolicy;
         this.refundEventPublisher = refundEventPublisher;
         this.bookingEventPublisher = bookingEventPublisher;
+        this.bookingMetrics = bookingMetrics;
     }
 
     @Transactional
@@ -83,6 +87,7 @@ public class CancellationService {
         Refund refund = refundRepository.save(new Refund(bookingId, amount, RefundState.INITIATED));
         refundEventPublisher.refundRequested(refund);
         bookingEventPublisher.bookingStateChanged(booking);
+        bookingMetrics.recordTransition(BookingState.CANCELLED);
 
         log.info("Booking {} CANCELLED; seats released; refund {} of {} initiated",
                 bookingId, refund.getId(), amount);

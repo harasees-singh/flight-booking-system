@@ -223,6 +223,6 @@ club.cred.flightbookingsystem
 1. **Phase 1** — Domain models, repositories, seed data, in-memory graph + search API.
 2. **Phase 2** — Booking flow (sync seat-block call + async payment callback) with seat locking & state machine.
 3. **Phase 3** — Cancellation + refund event (Spring Kafka), payment black box stub.
-4. **Phase 4** — Observability (actuator, Prometheus).
+4. **Phase 4** — Observability (actuator, Prometheus). ✅ Custom Micrometer metrics (`metrics` package), HTTP latency histograms, and a Prometheus + Grafana stack in Docker Compose.
 
 
