@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:itkafka;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  # Point Spring Kafka at the in-JVM @EmbeddedKafka broker.
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers}
+    consumer:
+      auto-offset-reset: earliest
+
+# Real Kafka path enabled (consumers + publishers active) against the embedded broker.
+flightbooking:
+  kafka:
+    enabled: true
+  seed:
+    flight-count: 0
+
