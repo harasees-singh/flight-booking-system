@@ -68,7 +68,7 @@
 - **Booking Service** — write path. Owns the booking **state machine**, seat locking, and the payment callback handling.
 - **Cancellation Service** — validates booking, releases seats, publishes refund event.
 - **Refund/Payment** — black box; integrated via **Kafka** events.
-- **Graph Loader** — bootstraps and periodically refreshes the flight graph from the DB.
+- **Graph Loader** — bootstraps and periodically refreshes the flight graph from the DB. The graph uses an **immutable-snapshot / copy-on-write** scheme: each refresh builds a brand-new adjacency map and swaps it via a single `volatile` reference store (atomic + safely published). Readers are lock-free and the old map is never mutated, so in-flight searches holding the previous reference continue safely until they finish (then it's GC'd).
 
 ### 2.2 Data Stores
 - **RDBMS (Percona MySQL)** — source of truth for `aircraft`, `flight`, `booking`, `refund`. Run locally via the **Percona Docker image**. Seat decrement uses optimistic/pessimistic locking to avoid oversell.

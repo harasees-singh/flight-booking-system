@@ -2,6 +2,8 @@ package club.cred.flightbookingsystem.booking;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,6 +56,33 @@ class BookingExpirySweeperTest {
         when(bookingRepository.findStaleBookingIds(eq(BookingState.PENDING_PAYMENT), any()))
                 .thenReturn(List.of());
 
+        sweeper.sweepExpiredBookings();
+
+        verify(bookingService, never()).expireBooking(any());
+    }
+
+    @Test
+    void continuesSweepingWhenOneExpiryFails() {
+        when(bookingRepository.findStaleBookingIds(eq(BookingState.PENDING_PAYMENT), any()))
+                .thenReturn(List.of(10L, 11L, 12L));
+        doThrow(new RuntimeException("boom")).when(bookingService).expireBooking(11L);
+        doNothing().when(bookingService).expireBooking(10L);
+        doNothing().when(bookingService).expireBooking(12L);
+
+        // A single failing booking must not abort the rest of the sweep nor propagate.
+        sweeper.sweepExpiredBookings();
+
+        verify(bookingService).expireBooking(10L);
+        verify(bookingService).expireBooking(11L);
+        verify(bookingService).expireBooking(12L);
+    }
+
+    @Test
+    void swallowsQueryFailureSoSchedulerKeepsRunning() {
+        when(bookingRepository.findStaleBookingIds(eq(BookingState.PENDING_PAYMENT), any()))
+                .thenThrow(new RuntimeException("db unavailable"));
+
+        // Must not throw — the next scheduled run will retry.
         sweeper.sweepExpiredBookings();
 
         verify(bookingService, never()).expireBooking(any());

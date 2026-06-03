@@ -45,13 +45,23 @@ public class FlightGraph {
             initialDelayString = "${flightbooking.graph.refresh-interval-ms:300000}")
     @Transactional(readOnly = true)
     public void refresh() {
-        List<Flight> flights = flightRepository.findAllWithAircraft();
-        Map<String, List<Flight>> next = new HashMap<>();
-        for (Flight flight : flights) {
-            next.computeIfAbsent(flight.getSource(), k -> new ArrayList<>()).add(flight);
+        long startNanos = System.nanoTime();
+        try {
+            List<Flight> flights = flightRepository.findAllWithAircraft();
+            Map<String, List<Flight>> next = new HashMap<>();
+            for (Flight flight : flights) {
+                next.computeIfAbsent(flight.getSource(), k -> new ArrayList<>()).add(flight);
+            }
+            this.adjacency = next;
+            long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+            log.info("Flight graph refreshed: {} cities, {} flights in {} ms",
+                    next.size(), flights.size(), elapsedMs);
+        } catch (RuntimeException ex) {
+            // Keep serving the previous (immutable) snapshot rather than going dark on a transient
+            // DB hiccup; the next scheduled run will retry.
+            log.error("Flight graph refresh failed; retaining previous snapshot ({} cities)",
+                    adjacency.size(), ex);
         }
-        this.adjacency = next;
-        log.info("Flight graph refreshed: {} cities, {} flights", next.size(), flights.size());
     }
 
     /** Outbound flights from the given city (never null). */

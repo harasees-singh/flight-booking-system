@@ -114,6 +114,7 @@ public class BookingService {
         bookingRepository.save(booking);
 
         eventPublisher.bookingStateChanged(booking);
+        bookingMetrics.recordTransition(BookingState.PENDING_PAYMENT);
 
         log.info("Booking {} created in PENDING_PAYMENT ({} pax, {} legs, amount {})",
                 booking.getId(), pax, legs.size(), totalAmount);
@@ -143,6 +144,7 @@ public class BookingService {
         }
         booking.setState(target);
         eventPublisher.bookingStateChanged(booking);
+        bookingMetrics.recordTransition(target);
         log.info("Booking {} -> {}", bookingId, target);
     }
 

@@ -68,3 +68,19 @@ management:
     metrics:
       export:
         enabled: true
+
+# --- Logging ----------------------------------------------------------------
+logging:
+  level:
+    root: INFO
+    club.cred.flightbookingsystem: INFO
+    # Quiet by default; flip to DEBUG to trace the read path / SQL when diagnosing.
+    club.cred.flightbookingsystem.search: INFO
+    org.hibernate.SQL: WARN
+    org.apache.kafka: WARN
+    org.springframework.kafka: INFO
+  pattern:
+    # Include thread + logger so booking/Kafka/scheduler activity is traceable in prod logs.
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
+

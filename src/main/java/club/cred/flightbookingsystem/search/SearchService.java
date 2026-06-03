@@ -15,6 +15,8 @@ import java.util.Queue;
 import java.util.Set;
 
 import club.cred.flightbookingsystem.metrics.SearchMetrics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +32,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SearchService {
+
+    private static final Logger log = LoggerFactory.getLogger(SearchService.class);
 
     private final FlightGraph flightGraph;
     private final SearchMetrics searchMetrics;
@@ -50,11 +54,14 @@ public class SearchService {
     }
 
     public SearchResponse search(String source, String destination, LocalDate date, int passengers) {
+        log.debug("Search request: {} -> {} on {} for {} pax", source, destination, date, passengers);
         List<JourneyDto> journeys = bfs(source, destination, date, passengers);
         journeys.sort(Comparator
                 .comparingInt(JourneyDto::stops)
                 .thenComparingInt(JourneyDto::totalDurationMin));
         searchMetrics.recordSearch(source, destination, journeys.size());
+        log.debug("Search result: {} -> {} on {} for {} pax found {} journey(s)",
+                source, destination, date, passengers, journeys.size());
         return new SearchResponse(source, destination, date, passengers, journeys.size(), journeys);
     }
 

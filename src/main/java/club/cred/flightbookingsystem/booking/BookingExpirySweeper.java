@@ -40,15 +40,34 @@ public class BookingExpirySweeper {
             initialDelayString = "${flightbooking.booking.expiry-sweep-ms:300000}")
     public void sweepExpiredBookings() {
         LocalDateTime cutoff = LocalDateTime.now().minusSeconds(paymentTtlSeconds);
-        List<Long> staleIds = bookingRepository.findStaleBookingIds(BookingState.PENDING_PAYMENT, cutoff);
+        List<Long> staleIds;
+        try {
+            staleIds = bookingRepository.findStaleBookingIds(BookingState.PENDING_PAYMENT, cutoff);
+        } catch (RuntimeException ex) {
+            log.error("Expiry sweeper failed to query stale bookings (cutoff {}); will retry next run",
+                    cutoff, ex);
+            return;
+        }
         if (staleIds.isEmpty()) {
+            log.debug("Expiry sweeper: no stale PENDING_PAYMENT bookings older than {}", cutoff);
             return;
         }
         log.info("Expiry sweeper: {} stale PENDING_PAYMENT booking(s) older than {} -> expiring",
                 staleIds.size(), cutoff);
+        int expired = 0;
+        int failed = 0;
         for (Long bookingId : staleIds) {
-            bookingService.expireBooking(bookingId);
+            try {
+                bookingService.expireBooking(bookingId);
+                expired++;
+            } catch (RuntimeException ex) {
+                // Isolate failures so one bad booking does not stop the rest of the sweep.
+                failed++;
+                log.error("Expiry sweeper failed to expire booking {}; continuing", bookingId, ex);
+            }
         }
+        log.info("Expiry sweeper finished: {} expired, {} failed of {} candidate(s)",
+                expired, failed, staleIds.size());
     }
 }
 
