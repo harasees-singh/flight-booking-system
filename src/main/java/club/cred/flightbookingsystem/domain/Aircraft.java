@@ -6,6 +6,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * An aircraft model. Single airline, multiple aircraft models.
@@ -13,6 +15,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "aircraft")
+@Getter
 public class Aircraft {
 
     @Id
@@ -20,9 +23,11 @@ public class Aircraft {
     private Long id;
 
     /** e.g. A320, B737. */
+    @Setter
     @Column(nullable = false)
     private String model;
 
+    @Setter
     @Column(nullable = false)
     private int totalSeats;
 
@@ -31,26 +36,6 @@ public class Aircraft {
 
     public Aircraft(String model, int totalSeats) {
         this.model = model;
-        this.totalSeats = totalSeats;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getModel() {
-        return model;
-    }
-
-    public void setModel(String model) {
-        this.model = model;
-    }
-
-    public int getTotalSeats() {
-        return totalSeats;
-    }
-
-    public void setTotalSeats(int totalSeats) {
         this.totalSeats = totalSeats;
     }
 }

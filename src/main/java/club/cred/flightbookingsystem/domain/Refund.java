@@ -9,10 +9,13 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import lombok.Getter;
+import lombok.Setter;
 
 /** A (partial) refund raised when a booking is cancelled. */
 @Entity
 @Table(name = "refund")
+@Getter
 public class Refund {
 
     @Id
@@ -25,6 +28,7 @@ public class Refund {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private RefundState state;
@@ -35,26 +39,6 @@ public class Refund {
     public Refund(Long bookingId, BigDecimal amount, RefundState state) {
         this.bookingId = bookingId;
         this.amount = amount;
-        this.state = state;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getBookingId() {
-        return bookingId;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public RefundState getState() {
-        return state;
-    }
-
-    public void setState(RefundState state) {
         this.state = state;
     }
 }

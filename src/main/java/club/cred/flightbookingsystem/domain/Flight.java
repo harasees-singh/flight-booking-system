@@ -12,6 +12,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * A direct (single-leg) flight operated by the airline.
@@ -22,6 +24,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_flight_source", columnList = "source"),
         @Index(name = "idx_flight_src_dst", columnList = "source,destination")
 })
+@Getter
 public class Flight {
 
     @Id
@@ -52,6 +55,7 @@ public class Flight {
     @Column(nullable = false)
     private int totalSeats;
 
+    @Setter
     @Column(nullable = false)
     private int seatsRemaining;
 
@@ -77,54 +81,6 @@ public class Flight {
         this.totalSeats = totalSeats;
         this.seatsRemaining = seatsRemaining;
         this.baseFare = baseFare;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Aircraft getAircraft() {
-        return aircraft;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public String getDestination() {
-        return destination;
-    }
-
-    public LocalDateTime getDepartureTime() {
-        return departureTime;
-    }
-
-    public LocalDateTime getArrivalTime() {
-        return arrivalTime;
-    }
-
-    public int getFlightDurationMin() {
-        return flightDurationMin;
-    }
-
-    public int getTotalSeats() {
-        return totalSeats;
-    }
-
-    public int getSeatsRemaining() {
-        return seatsRemaining;
-    }
-
-    public void setSeatsRemaining(int seatsRemaining) {
-        this.seatsRemaining = seatsRemaining;
-    }
-
-    public BigDecimal getBaseFare() {
-        return baseFare;
-    }
-
-    public Long getVersion() {
-        return version;
     }
 }
 

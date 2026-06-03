@@ -9,6 +9,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * A passenger on a booking. Carries the per-passenger fare for the journey
@@ -16,6 +18,7 @@ import java.math.BigDecimal;
  */
 @Entity
 @Table(name = "passenger")
+@Getter
 public class Passenger {
 
     @Id
@@ -29,9 +32,11 @@ public class Passenger {
     private int age;
 
     /** Per-passenger fare for the whole journey (sum of leg base fares). */
+    @Setter
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal bookingRate;
 
+    @Setter
     @ManyToOne(optional = false)
     @JoinColumn(name = "booking_id", nullable = false)
     private Booking booking;
@@ -43,34 +48,6 @@ public class Passenger {
         this.name = name;
         this.age = age;
         this.bookingRate = bookingRate;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public int getAge() {
-        return age;
-    }
-
-    public BigDecimal getBookingRate() {
-        return bookingRate;
-    }
-
-    public void setBookingRate(BigDecimal bookingRate) {
-        this.bookingRate = bookingRate;
-    }
-
-    public Booking getBooking() {
-        return booking;
-    }
-
-    public void setBooking(Booking booking) {
-        this.booking = booking;
     }
 }
 

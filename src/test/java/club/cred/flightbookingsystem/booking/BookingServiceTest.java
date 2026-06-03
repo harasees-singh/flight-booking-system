@@ -75,7 +75,14 @@ class BookingServiceTest {
         Flight leg2 = flight(2L, "BOM", "BLR", T0.plusHours(4), 120, 2500); // dep 13:00, layover 120
         when(flightRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(leg1, leg2));
         when(seatService.tryBlock(any(), anyInt())).thenReturn(true);
-        when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArgument(0));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> {
+            Booking saved = i.getArgument(0);
+            long pid = 1;
+            for (Passenger p : saved.getPassengers()) {
+                ReflectionTestUtils.setField(p, "id", pid++);
+            }
+            return saved;
+        });
 
         CreateBookingRequest request = new CreateBookingRequest(List.of(1L, 2L),
                 List.of(new PassengerRequest("Alice", 30), new PassengerRequest("Bob", 28)));
@@ -84,7 +91,10 @@ class BookingServiceTest {
 
         assertThat(response.state()).isEqualTo(BookingState.PENDING_PAYMENT);
         assertThat(response.flightIds()).containsExactly(1L, 2L);
-        assertThat(response.perPassengerRate()).isEqualByComparingTo("5500"); // 3000 + 2500
+        // Per-passenger fares are a Map<passengerId, Money>; each passenger pays the same sum-of-legs fare.
+        assertThat(response.passengerRates()).hasSize(2).containsKeys(1L, 2L);
+        assertThat(response.passengerRates().values())
+                .allSatisfy(rate -> assertThat(rate).isEqualByComparingTo("5500")); // 3000 + 2500
         assertThat(response.totalAmount()).isEqualByComparingTo("11000");      // x2 pax
         verify(seatService).tryBlock(1L, 2);
         verify(seatService).tryBlock(2L, 2);

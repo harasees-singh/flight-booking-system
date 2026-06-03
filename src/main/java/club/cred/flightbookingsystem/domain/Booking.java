@@ -19,19 +19,25 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * A booking = a journey (one or more ordered flight legs) for a list of passengers.
  */
 @Entity
 @Table(name = "booking")
+@Getter
 public class Booking {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private BookingState state;
@@ -47,6 +53,7 @@ public class Booking {
     @OrderColumn(name = "leg_index")
     private List<Flight> flights = new ArrayList<>();
 
+    @Setter
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
@@ -80,40 +87,16 @@ public class Booking {
         this.passengers.add(passenger);
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public BookingState getState() {
-        return state;
-    }
-
-    public void setState(BookingState state) {
-        this.state = state;
-    }
-
-    public List<Passenger> getPassengers() {
-        return passengers;
-    }
-
-    public List<Flight> getFlights() {
-        return flights;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
-    }
-
-    public void setTotalAmount(BigDecimal totalAmount) {
-        this.totalAmount = totalAmount;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    /**
+     * Per-passenger fares as a map keyed by passenger id ({@code Map<Passenger id, Money>}).
+     * Insertion order is preserved.
+     */
+    public Map<Long, BigDecimal> getPassengerRates() {
+        Map<Long, BigDecimal> rates = new LinkedHashMap<>();
+        for (Passenger passenger : passengers) {
+            rates.put(passenger.getId(), passenger.getBookingRate());
+        }
+        return rates;
     }
 }
 
