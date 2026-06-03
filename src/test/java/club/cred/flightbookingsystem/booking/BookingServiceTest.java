@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -20,17 +19,13 @@ import club.cred.flightbookingsystem.dto.BookingResponse;
 import club.cred.flightbookingsystem.dto.CreateBookingRequest;
 import club.cred.flightbookingsystem.dto.PassengerRequest;
 import club.cred.flightbookingsystem.messaging.BookingEventPublisher;
-import club.cred.flightbookingsystem.messaging.PaymentTimeoutScheduler;
 import club.cred.flightbookingsystem.repository.BookingRepository;
 import club.cred.flightbookingsystem.repository.FlightRepository;
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class BookingServiceTest {
@@ -42,12 +37,11 @@ class BookingServiceTest {
     private final FlightRepository flightRepository = org.mockito.Mockito.mock(FlightRepository.class);
     private final SeatService seatService = org.mockito.Mockito.mock(SeatService.class);
     private final BookingEventPublisher eventPublisher = org.mockito.Mockito.mock(BookingEventPublisher.class);
-    private final PaymentTimeoutScheduler timeoutScheduler = org.mockito.Mockito.mock(PaymentTimeoutScheduler.class);
 
     private final BookingService service = new BookingService(
             bookingRepository, flightRepository, seatService, new BookingStateMachine(),
-            eventPublisher, timeoutScheduler,
-            3, 60, 720, 600);
+            eventPublisher,
+            3, 60, 720);
 
     private static Flight flight(long id, String src, String dst,
                                  LocalDateTime dep, int durationMin, double fare) {
@@ -98,7 +92,6 @@ class BookingServiceTest {
         assertThat(response.totalAmount()).isEqualByComparingTo("11000");      // x2 pax
         verify(seatService).tryBlock(1L, 2);
         verify(seatService).tryBlock(2L, 2);
-        verify(timeoutScheduler).scheduleExpiry(any(), any(Instant.class));
         verify(eventPublisher).bookingStateChanged(any(Booking.class));
     }
 
@@ -118,7 +111,6 @@ class BookingServiceTest {
 
         verify(seatService).release(1L, 1);            // first leg rolled back
         verify(bookingRepository, never()).save(any());
-        verifyNoInteractions(timeoutScheduler);
     }
 
     @Test
@@ -233,24 +225,6 @@ class BookingServiceTest {
 
         verify(seatService, never()).release(any(), anyInt());
         verify(eventPublisher, never()).bookingStateChanged(any());
-    }
-
-    @Test
-    void schedulesExpiryAtConfiguredTtl() {
-        Flight leg = flight(1L, "DEL", "BLR", T0, 120, 4000);
-        when(flightRepository.findAllById(List.of(1L))).thenReturn(List.of(leg));
-        when(seatService.tryBlock(any(), anyInt())).thenReturn(true);
-        when(bookingRepository.save(any(Booking.class))).thenAnswer(i -> i.getArgument(0));
-
-        Instant before = Instant.now();
-        service.createBooking(new CreateBookingRequest(List.of(1L),
-                List.of(new PassengerRequest("Alice", 30))));
-
-        ArgumentCaptor<Instant> captor = ArgumentCaptor.forClass(Instant.class);
-        verify(timeoutScheduler).scheduleExpiry(any(), captor.capture());
-        Instant expireAt = captor.getValue();
-        // TTL is 600s; allow a small execution window.
-        assertThat(Duration.between(before, expireAt).getSeconds()).isBetween(595L, 605L);
     }
 }
 

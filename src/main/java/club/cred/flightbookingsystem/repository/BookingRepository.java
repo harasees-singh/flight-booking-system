@@ -2,6 +2,8 @@ package club.cred.flightbookingsystem.repository;
 
 import club.cred.flightbookingsystem.domain.Booking;
 import club.cred.flightbookingsystem.domain.BookingState;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,5 +23,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     int compareAndSetState(@Param("id") Long id,
                            @Param("expected") BookingState expected,
                            @Param("newState") BookingState newState);
+
+    /** Ids of bookings stuck in {@code state} since before {@code cutoff} — used by the expiry sweeper. */
+    @Query("select b.id from Booking b where b.state = :state and b.createdAt < :cutoff")
+    List<Long> findStaleBookingIds(@Param("state") BookingState state,
+                                   @Param("cutoff") LocalDateTime cutoff);
 }
 

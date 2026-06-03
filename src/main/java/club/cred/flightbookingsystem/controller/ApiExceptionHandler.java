@@ -1,5 +1,6 @@
 package club.cred.flightbookingsystem.controller;
 
+import club.cred.flightbookingsystem.booking.InvalidBookingStateException;
 import club.cred.flightbookingsystem.booking.ResourceNotFoundException;
 import club.cred.flightbookingsystem.booking.SeatUnavailableException;
 import jakarta.validation.ConstraintViolationException;
@@ -35,6 +36,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(SeatUnavailableException.class)
     public ResponseEntity<Map<String, Object>> handleSeatsUnavailable(SeatUnavailableException ex) {
+        return body(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidBookingStateException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidState(InvalidBookingStateException ex) {
         return body(HttpStatus.CONFLICT, ex.getMessage());
     }
 

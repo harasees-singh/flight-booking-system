@@ -72,7 +72,7 @@
 
 ### 2.2 Data Stores
 - **RDBMS (Percona MySQL)** — source of truth for `aircraft`, `flight`, `booking`, `refund`. Run locally via the **Percona Docker image**. Seat decrement uses optimistic/pessimistic locking to avoid oversell.
-- **Kafka** — `payment.callback` (inbound from payment system), `payment.timeout` (per-booking delayed expiry), `payment.refund` (outbound to refund black box), `booking.events`. Run locally via a **Kafka Docker image**, integrated with **Spring Kafka**.
+- **Kafka** — `payment.callback` (inbound from payment system), `payment.refund` (outbound to refund black box), `booking.events`. Run locally via a **Kafka Docker image**, integrated with **Spring Kafka**.
 
 ---
 
@@ -164,7 +164,7 @@ The booking is **not** a single call — it is a synchronous seat-block call fol
 The payment system publishes a confirm/deny message to the **`payment.callback`** topic; the Booking Service consumes it.
 5. On **payment success** → state `SUCCESS`, seats committed; emit `booking.events`.
 6. On **payment failure / timeout** → state `FAILURE`, **unlock seats** (`seatsRemaining += pax`); emit `booking.events`.
-7. **Expiry of stale `PENDING_PAYMENT`** — handled via a **per-booking delayed Kafka message** (not a polling sweeper). At seat-block time a message is published to the **`payment.timeout`** topic to be consumed after a fixed delay (TTL). On consume, expire the booking and unlock seats. This gives near-exact timing and avoids full-table scans.
+7. **Expiry of stale `PENDING_PAYMENT`** — handled by a **scheduled sweeper** that runs every **5 minutes**. It queries for bookings stuck in `PENDING_PAYMENT` older than the TTL (`createdAt < now − ttl`) and expires each one. This is **durable across restarts** (state is re-derived from the DB every run, so nothing is lost if the app bounces) and needs no in-memory timers.
    - The expiry must be **idempotent** and guarded by a conditional update: `UPDATE booking SET state='FAILURE' WHERE id=? AND state='PENDING_PAYMENT'`; seats are unlocked **only if that update actually changed a row**, preventing a double-unlock race with the payment callback.
 
 ### 3.5 Cancellation Flow

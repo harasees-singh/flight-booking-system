@@ -18,10 +18,6 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(KafkaTopics.PAYMENT_CALLBACK).partitions(3).replicas(1).build();
     }
 
-    @Bean
-    public NewTopic paymentTimeoutTopic() {
-        return TopicBuilder.name(KafkaTopics.PAYMENT_TIMEOUT).partitions(3).replicas(1).build();
-    }
 
     @Bean
     public NewTopic paymentRefundTopic() {

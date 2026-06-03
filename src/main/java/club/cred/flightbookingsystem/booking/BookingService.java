@@ -8,12 +8,10 @@ import club.cred.flightbookingsystem.dto.BookingResponse;
 import club.cred.flightbookingsystem.dto.CreateBookingRequest;
 import club.cred.flightbookingsystem.dto.PassengerRequest;
 import club.cred.flightbookingsystem.messaging.BookingEventPublisher;
-import club.cred.flightbookingsystem.messaging.PaymentTimeoutScheduler;
 import club.cred.flightbookingsystem.repository.BookingRepository;
 import club.cred.flightbookingsystem.repository.FlightRepository;
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * Booking is a two-interaction flow: a synchronous seat-block call ({@link #createBooking})
  * followed by an asynchronous payment confirmation ({@link #confirmPayment}) arriving over Kafka.
- * Stale pending bookings are expired via a per-booking delayed message ({@link #expireBooking}).
+ * Stale pending bookings are expired by a scheduled sweeper via {@link #expireBooking}.
  */
 @Service
 public class BookingService {
@@ -50,39 +48,33 @@ public class BookingService {
     private final SeatService seatService;
     private final BookingStateMachine stateMachine;
     private final BookingEventPublisher eventPublisher;
-    private final PaymentTimeoutScheduler timeoutScheduler;
 
     private final int maxLegs;
     private final long minLayoverMinutes;
     private final long maxLayoverMinutes;
-    private final long paymentTtlSeconds;
 
     public BookingService(BookingRepository bookingRepository,
                           FlightRepository flightRepository,
                           SeatService seatService,
                           BookingStateMachine stateMachine,
                           BookingEventPublisher eventPublisher,
-                          PaymentTimeoutScheduler timeoutScheduler,
                           @Value("${flightbooking.search.max-legs:3}") int maxLegs,
                           @Value("${flightbooking.search.min-layover-minutes:60}") long minLayoverMinutes,
-                          @Value("${flightbooking.search.max-layover-minutes:720}") long maxLayoverMinutes,
-                          @Value("${flightbooking.booking.payment-ttl-seconds:600}") long paymentTtlSeconds) {
+                          @Value("${flightbooking.search.max-layover-minutes:720}") long maxLayoverMinutes) {
         this.bookingRepository = bookingRepository;
         this.flightRepository = flightRepository;
         this.seatService = seatService;
         this.stateMachine = stateMachine;
         this.eventPublisher = eventPublisher;
-        this.timeoutScheduler = timeoutScheduler;
         this.maxLegs = maxLegs;
         this.minLayoverMinutes = minLayoverMinutes;
         this.maxLayoverMinutes = maxLayoverMinutes;
-        this.paymentTtlSeconds = paymentTtlSeconds;
     }
 
     /**
      * Call 1 (synchronous): validate the journey, atomically block seats on every leg, and
-     * create the booking in {@code PENDING_PAYMENT}. Then arm the expiry timer. The client now
-     * proceeds to pay at the (black-box) payment system.
+     * create the booking in {@code PENDING_PAYMENT}. The client now proceeds to pay at the
+     * (black-box) payment system; a scheduled sweeper expires the booking if payment never lands.
      */
     @Transactional
     public BookingResponse createBooking(CreateBookingRequest request) {
@@ -116,8 +108,6 @@ public class BookingService {
         stateMachine.apply(booking, BookingState.PENDING_PAYMENT);
         bookingRepository.save(booking);
 
-        Instant expireAt = Instant.now().plus(Duration.ofSeconds(paymentTtlSeconds));
-        timeoutScheduler.scheduleExpiry(booking.getId(), expireAt);
         eventPublisher.bookingStateChanged(booking);
 
         log.info("Booking {} created in PENDING_PAYMENT ({} pax, {} legs, amount {})",

@@ -37,7 +37,10 @@ flightbooking:
     min-layover-minutes: 60
     max-layover-minutes: 720
   booking:
-    payment-ttl-seconds: 600         # PENDING_PAYMENT bookings expire after this delay
+    payment-ttl-seconds: 600         # PENDING_PAYMENT bookings older than this are expired by the sweeper
+    expiry-sweep-ms: 300000          # sweeper runs every 5 min to fail+unlock stale pending bookings
+  refund:
+    percentage: 80                   # flat partial-refund percentage on cancellation (20% fee)
   seed:
     flight-count: 2500               # 2000-3000 distinct direct flights
     days-ahead: 14
