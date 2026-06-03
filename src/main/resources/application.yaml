@@ -15,15 +15,29 @@ spring:
         format_sql: false
   kafka:
     bootstrap-servers: localhost:9092
+    consumer:
+      group-id: flightbookingsystem
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "club.cred.flightbookingsystem.messaging"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 # --- Domain / search tuning -------------------------------------------------
 flightbooking:
+  kafka:
+    enabled: true                    # use real Spring Kafka (payment.callback / payment.timeout / booking.events)
   graph:
     refresh-interval-ms: 300000      # rebuild in-memory flight graph every 5 min
   search:
     max-legs: 3                      # at most 3 connecting flights per journey
     min-layover-minutes: 60
     max-layover-minutes: 720
+  booking:
+    payment-ttl-seconds: 600         # PENDING_PAYMENT bookings expire after this delay
   seed:
     flight-count: 2500               # 2000-3000 distinct direct flights
     days-ahead: 14

@@ -18,3 +18,8 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
+# Run without Kafka: booking events are logged and expiry is scheduled in-process.
+flightbooking:
+  kafka:
+    enabled: false
+
