@@ -144,6 +144,7 @@ INITIATED ──► PENDING_PAYMENT ──► SUCCESS
 | CANCELLED | user cancelled | unlock |
 
 **RefundState**: `INITIATED → PROCESSING → COMPLETED / FAILED`
+> The included black-box refund stub (`RefundProcessorStub`) currently transitions `INITIATED → COMPLETED` directly on consuming `payment.refund`; `PROCESSING`/`FAILED` are reserved for a real asynchronous processor.
 
 ### 3.3 Search Algorithm
 - Graph: `Map<City, List<Flight>>` adjacency list, rebuilt on schedule.
@@ -183,46 +184,96 @@ The payment system publishes a confirm/deny message to the **`payment.callback`*
 | `POST` | `/api/v1/bookings/{id}/cancel` | cancel + refund |
 | `GET` | `/api/v1/aircrafts`, `/api/v1/flights` | admin/seed lookups |
 
+> **Test harness:** `POST /api/v1/_sim/payment-callback?bookingId=&success=` publishes a message to `payment.callback`, standing in for the black-box payment system. It is only registered when Kafka is enabled (`flightbooking.kafka.enabled=true`).
+
 ### 3.7 Concurrency & Consistency
-- Seat updates via **conditional UPDATE** (or `@Version` optimistic lock) to prevent oversell.
-- Booking creation is **idempotent** via client request id.
-- Search is eventually consistent (graph refresh interval), acceptable for read path.
+- Seat updates via an **atomic conditional UPDATE** (`... SET seatsRemaining = seatsRemaining - pax WHERE seatsRemaining >= pax`); the `Flight.version` column additionally provides `@Version` optimistic locking. Together these prevent oversell under concurrency — verified by a parallel-booking integration test where, out of many racing requests for a 6-seat flight, exactly the affordable number win and `seatsRemaining` never goes negative.
+- **State transitions are idempotent and race-safe** via a single-statement compare-and-set (`UPDATE booking SET state=:new WHERE id=:id AND state=:expected`). Only the winning update unlocks/commits seats, so a duplicate payment callback, or an expiry sweep that races a confirmation, is a harmless no-op.
+- **Note:** there is currently **no client-supplied idempotency key** on `POST /bookings`; a retried create blocks a fresh set of seats. (A future `Idempotency-Key` header is the natural extension.)
+- Search is eventually consistent (graph refresh interval), acceptable for the read path.
 
 ---
 
 ## 4. Observability (Grafana)
 | Metric | Source |
 |---|---|
-| 5xx / 4xx / 2xx rates | Micrometer HTTP server metrics |
-| Kafka topic lag | Kafka consumer lag exporter |
-| API latency (p50/p95/p99) | Micrometer timers |
-| Search query patterns | custom counter tags (src, dst) |
+| 5xx / 4xx / 2xx rates | Micrometer HTTP server metrics (`http.server.requests`) |
+| API latency (p50/p95/p99) | `http.server.requests` histogram + percentiles/SLO buckets |
+| Kafka topic lag | Kafka consumer lag (Micrometer Kafka metrics) |
+| Search query patterns | `flightbooking.search.requests` — tags `src`, `dst`, `outcome` (hit/miss) |
+| Booking outcomes | `flightbooking.booking.transitions` — tag `state`; `flightbooking.booking.seat_rejections` |
 
-Expose via `spring-boot-starter-actuator` + `micrometer-registry-prometheus`; Grafana scrapes Prometheus.
+**Custom meters** live in the `metrics` package (`SearchMetrics`, `BookingMetrics`). Latency histograms, app-side percentiles and SLO buckets for `http.server.requests` are configured in `application.yaml`.
+
+Exposed via `spring-boot-starter-actuator` + `micrometer-registry-prometheus` at `/actuator/{health,info,prometheus,metrics}`. A **Prometheus + Grafana stack** ships in `docker-compose.yml` (Prometheus scrapes the app; Grafana auto-provisions the datasource and the `flightbookingsystem-overview` dashboard under `monitoring/`).
 
 ---
 
-## 5. Package Layout (planned)
+## 5. Package Layout
 ```
 club.cred.flightbookingsystem
-├── domain            // entities + enums
-├── repository        // JPA repositories
-├── dto               // request/response models
-├── search            // graph + BFS search service
-├── booking           // booking service + state machine
-├── cancellation      // cancellation service
-├── refund            // refund event publisher
-├── controller        // REST controllers
-├── config            // kafka, seed data, datasource
-└── metrics           // custom Micrometer metrics
+├── domain            // entities (Aircraft, Flight, Booking, Passenger, Refund) + enums
+├── repository        // Spring Data JPA repositories
+├── dto               // request/response records
+├── search            // FlightGraph (in-mem graph) + SearchService (BFS)
+├── booking           // BookingService, BookingStateMachine, SeatService,
+│                     //   CancellationService, RefundPolicy, BookingExpirySweeper, exceptions
+├── messaging         // event abstractions (publishers, messages, KafkaTopics)
+│   ├── kafka         //   Spring Kafka publishers, payment.callback consumer,
+│   │                 //     refund processor stub, topic config
+│   └── local         //   logging fallbacks when Kafka is disabled (local profile)
+├── controller        // REST controllers + ApiExceptionHandler + payment simulator
+├── config            // DataSeeder, SchedulingConfig
+└── metrics           // custom Micrometer metrics (SearchMetrics, BookingMetrics)
 ```
+> Note: cancellation/refund logic lives in the `booking` and `messaging` packages rather than standalone `cancellation`/`refund` packages.
 
 ---
 
 ## 6. Phased Build Plan
-1. **Phase 1** — Domain models, repositories, seed data, in-memory graph + search API.
-2. **Phase 2** — Booking flow (sync seat-block call + async payment callback) with seat locking & state machine.
-3. **Phase 3** — Cancellation + refund event (Spring Kafka), payment black box stub.
-4. **Phase 4** — Observability (actuator, Prometheus). ✅ Custom Micrometer metrics (`metrics` package), HTTP latency histograms, and a Prometheus + Grafana stack in Docker Compose.
+1. **Phase 1** ✅ — Domain models, repositories, seed data, in-memory graph + search API.
+2. **Phase 2** ✅ — Booking flow (sync seat-block call + async payment callback) with seat locking & state machine.
+3. **Phase 3** ✅ — Cancellation + refund event (Spring Kafka), payment black-box stub.
+4. **Phase 4** ✅ — Observability (actuator, Prometheus). Custom Micrometer metrics (`metrics` package), HTTP latency histograms, and a Prometheus + Grafana stack in Docker Compose.
+
+---
+
+## 7. Configuration & Profiles
+- **Default profile** — Percona/MySQL datasource + real Spring Kafka (`flightbooking.kafka.enabled=true`). Brought up via `docker-compose.yml` (Percona, Kafka, Prometheus, Grafana).
+- **`local` profile** — in-memory H2 (`create-drop`) with Kafka **disabled**; booking events and refunds go to logging fallback publishers (`messaging.local`) and the payment callback path is exercised in-process. Used for fast runs and most tests.
+
+Key tunables (`application.yaml`, prefix `flightbooking.`):
+
+| Property | Default | Purpose |
+|---|---|---|
+| `graph.refresh-interval-ms` | 300000 | flight-graph rebuild cadence |
+| `search.max-legs` | 3 | max connecting flights per journey |
+| `search.min/max-layover-minutes` | 60 / 720 | valid connection window |
+| `booking.payment-ttl-seconds` | 600 | PENDING_PAYMENT staleness threshold |
+| `booking.expiry-sweep-ms` | 300000 | sweeper cadence |
+| `refund.percentage` | 80 | flat partial-refund percentage |
+| `seed.flight-count` / `days-ahead` | 2500 / 14 | synthetic seed data size/horizon |
+
+---
+
+## 8. Testing
+- **Unit tests** — services and policies with Mockito: state machine, booking/cancellation services, refund policy, seat service, expiry sweeper (incl. resilience), payment-callback consumer, refund processor stub, exception handler, and the custom metrics.
+- **Integration tests** (`@SpringBootTest`, random-port server, H2) drive the real HTTP endpoints end-to-end:
+  - booking happy path: search → create → confirm → SUCCESS;
+  - cancellation → CANCELLED + seats released + partial refund;
+  - payment denial and **timeout/expiry** → FAILURE + seats released;
+  - **sweeper boundary**: a fresh (within-TTL) booking is not expired, an aged one is;
+  - **race-safety**: late callback after expiry is ignored; duplicate confirmation is idempotent;
+  - **no oversell** under real parallel load; multi-leg journey blocks/releases every leg;
+  - overbooking and cancel-of-non-confirmed → `409`.
+- **End-to-end Kafka test** — `@EmbeddedKafka` exercises the full async pipeline: payment simulator → `payment.callback` consumer → SUCCESS, then cancel → `payment.refund` → processor completes the refund.
+
+---
+
+## 9. Resilience & Operability
+- **Durable expiry** — the sweeper re-derives stale bookings from the DB each run (no in-memory timers), so it survives restarts. Each booking is expired in its own try/catch and a DB query failure is swallowed-and-logged so one bad row or transient outage doesn't stop the sweep.
+- **Graph refresh fault tolerance** — a failed rebuild logs an error and **retains the previous immutable snapshot** rather than going dark.
+- **Kafka publish safety** — sends use async callbacks; a failed publish is logged at `ERROR` (a dropped `payment.refund` is flagged as money-owed-not-processed). The `payment.callback` consumer guards malformed messages and rethrows on processing failure so the listener container can retry/route to a DLT.
+- **Structured logging** — per-package levels and a thread/logger console pattern (`application.yaml`) make booking, Kafka, and scheduler activity traceable in production.
 
 
