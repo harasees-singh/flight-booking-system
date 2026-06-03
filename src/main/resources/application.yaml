@@ -1,3 +1,40 @@
 spring:
   application:
     name: flightbookingsystem
+  datasource:
+    url: jdbc:mysql://localhost:3306/flightbooking?createDatabaseIfNotExist=true&serverTimezone=UTC
+    username: flight
+    password: flight
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  kafka:
+    bootstrap-servers: localhost:9092
+
+# --- Domain / search tuning -------------------------------------------------
+flightbooking:
+  graph:
+    refresh-interval-ms: 300000      # rebuild in-memory flight graph every 5 min
+  search:
+    max-legs: 3                      # at most 3 connecting flights per journey
+    min-layover-minutes: 60
+    max-layover-minutes: 720
+  seed:
+    flight-count: 2500               # 2000-3000 distinct direct flights
+    days-ahead: 14
+    random-seed: 42
+
+# --- Observability ----------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: flightbookingsystem
