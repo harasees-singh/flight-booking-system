@@ -45,7 +45,8 @@ class BookingServiceTest {
     private final PaymentTimeoutScheduler timeoutScheduler = org.mockito.Mockito.mock(PaymentTimeoutScheduler.class);
 
     private final BookingService service = new BookingService(
-            bookingRepository, flightRepository, seatService, eventPublisher, timeoutScheduler,
+            bookingRepository, flightRepository, seatService, new BookingStateMachine(),
+            eventPublisher, timeoutScheduler,
             3, 60, 720, 600);
 
     private static Flight flight(long id, String src, String dst,

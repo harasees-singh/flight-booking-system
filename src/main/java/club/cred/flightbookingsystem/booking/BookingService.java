@@ -48,6 +48,7 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final FlightRepository flightRepository;
     private final SeatService seatService;
+    private final BookingStateMachine stateMachine;
     private final BookingEventPublisher eventPublisher;
     private final PaymentTimeoutScheduler timeoutScheduler;
 
@@ -59,6 +60,7 @@ public class BookingService {
     public BookingService(BookingRepository bookingRepository,
                           FlightRepository flightRepository,
                           SeatService seatService,
+                          BookingStateMachine stateMachine,
                           BookingEventPublisher eventPublisher,
                           PaymentTimeoutScheduler timeoutScheduler,
                           @Value("${flightbooking.search.max-legs:3}") int maxLegs,
@@ -68,6 +70,7 @@ public class BookingService {
         this.bookingRepository = bookingRepository;
         this.flightRepository = flightRepository;
         this.seatService = seatService;
+        this.stateMachine = stateMachine;
         this.eventPublisher = eventPublisher;
         this.timeoutScheduler = timeoutScheduler;
         this.maxLegs = maxLegs;
@@ -104,12 +107,13 @@ public class BookingService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal totalAmount = perPassengerRate.multiply(BigDecimal.valueOf(pax));
 
-        Booking booking = new Booking(BookingState.PENDING_PAYMENT);
+        Booking booking = new Booking(BookingState.INITIATED);
         booking.getFlights().addAll(legs);
         booking.setTotalAmount(totalAmount);
         for (PassengerRequest p : request.passengers()) {
             booking.addPassenger(new Passenger(p.name(), p.age(), perPassengerRate));
         }
+        stateMachine.apply(booking, BookingState.PENDING_PAYMENT);
         bookingRepository.save(booking);
 
         Instant expireAt = Instant.now().plus(Duration.ofSeconds(paymentTtlSeconds));
@@ -134,9 +138,7 @@ public class BookingService {
             log.warn("Payment callback for unknown booking {}", bookingId);
             return;
         }
-        int updated = bookingRepository.compareAndSetState(
-                bookingId, BookingState.PENDING_PAYMENT, target);
-        if (updated == 0) {
+        if (!transition(bookingId, BookingState.PENDING_PAYMENT, target)) {
             log.info("Payment callback for booking {} ignored (already {})",
                     bookingId, booking.getState());
             return;
@@ -159,9 +161,7 @@ public class BookingService {
         if (booking == null) {
             return;
         }
-        int updated = bookingRepository.compareAndSetState(
-                bookingId, BookingState.PENDING_PAYMENT, BookingState.FAILURE);
-        if (updated == 0) {
+        if (!transition(bookingId, BookingState.PENDING_PAYMENT, BookingState.FAILURE)) {
             return; // already SUCCESS / FAILURE / CANCELLED
         }
         releaseSeats(booking);
@@ -178,6 +178,11 @@ public class BookingService {
         booking.getFlights().size();
         booking.getPassengers().size();
         return BookingResponse.from(booking);
+    }
+
+    private boolean transition(Long bookingId, BookingState expected, BookingState target) {
+        stateMachine.validate(expected, target);
+        return bookingRepository.compareAndSetState(bookingId, expected, target) == 1;
     }
 
     private void releaseSeats(Booking booking) {
